@@ -66,10 +66,14 @@ class StoryContributionEvent extends Event {
     state.participants.set(userId, participantCount + 1);
     state.lastContributor = userId;
 
+    
+
     this.cooldowns.set(cooldownKey, Date.now());
 
     // Contador de contribuciones de usuarios desde la última respuesta de la IA
     state.userCountSinceAI = Number(state.userCountSinceAI || 0) + 1;
+
+    
 
     // No reactions per user request
 
@@ -78,6 +82,7 @@ class StoryContributionEvent extends Event {
     if (config.api_key && config.model && state.userCountSinceAI >= threshold) {
       state.userCountSinceAI = 0;
       this.saveStoryState(channelId, state);
+      console.log(`[STORY] threshold reached (${threshold}) — generating AI response`);
       await this.generateAIResponse(message, state, config);
       return;
     }
@@ -97,18 +102,18 @@ class StoryContributionEvent extends Event {
 
   loadStoryStates() {
     try {
-      const storiesDir = path.join(__dirname, '../../data/stories_data');
-      if (!fs.existsSync(storiesDir)) {
-        fs.mkdirSync(storiesDir, { recursive: true });
+      const dir = path.join(__dirname, '../../data/collaborativeStory');
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
         return;
       }
 
-      const files = fs.readdirSync(storiesDir).filter(f => f.startsWith('story_') && f.endsWith('.json'));
+      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
       files.forEach(file => {
         try {
-          const filePath = path.join(storiesDir, file);
+          const filePath = path.join(dir, file);
           const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          const channelId = file.replace('story_', '').replace('.json', '');
+          const channelId = file.replace('.json', '');
           const participants = new Map(Object.entries(data.participants || {}).map(([k, v]) => [k, Number(v)]));
           this.channelStates.set(channelId, { ...data, participants });
         } catch (error) {
@@ -122,9 +127,9 @@ class StoryContributionEvent extends Event {
 
   saveStoryState(channelId, state) {
     try {
-      const storiesDir = path.join(__dirname, '../../data/stories_data');
+      const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
       if (!fs.existsSync(storiesDir)) fs.mkdirSync(storiesDir, { recursive: true });
-      const filePath = path.join(storiesDir, `story_${channelId}.json`);
+      const filePath = path.join(storiesDir, `${channelId}.json`);
       const saveData = { ...state, participants: Object.fromEntries(state.participants) };
       fs.writeFileSync(filePath, JSON.stringify(saveData, null, 2));
     } catch (error) {
@@ -134,6 +139,9 @@ class StoryContributionEvent extends Event {
 
   async generateAIResponse(message, state, config) {
     const maxRetries = 3; let aiMessage = null;
+    // prevent concurrent AI generation
+    if (state.waitingIA) return;
+    state.waitingIA = true;
     try { await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SEND_MESSAGES: false }); } catch (e) { }
     try {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -148,12 +156,22 @@ class StoryContributionEvent extends Event {
           const contTemp = typeof contCfg.temperature === 'number' ? contCfg.temperature : 0.8;
 
           const recentStory = state.story.slice(-(config.max_context_messages || 20));
-          const context = recentStory.map(entry => `${entry.authorName}: ${entry.content}`).join('\n');
-          const systemPrompt = `Eres un narrador creativo que continúa historias colaborativas. Estilo: ${contTone}. Continúa la historia de manera coherente y creativa en MÁXIMO ${contMaxChars} caracteres. No uses comillas ni pongas tu nombre. Solo escribe la continuación.`;
+
+          // Build chat-style messages so the model can use assistant/user roles for context
+          const systemPrompt = `Eres un narrador creativo que continúa historias colaborativas. Estilo: ${contTone}. Lee el contexto provisto y continúa la historia de forma coherente, respetando nombres, hechos y relaciones previas. Mantén la voz narrativa consistente y usa un máximo de ${contMaxChars} caracteres en la continuación. No introduzcas personajes nuevos sin justificación.`;
+
+          const messagesPayload = [{ role: 'system', content: systemPrompt }];
+          for (const entry of recentStory) {
+            const role = (entry.author === 'AI') ? 'assistant' : 'user';
+            messagesPayload.push({ role, content: `${entry.authorName}: ${entry.content}` });
+          }
+          // Final user prompt asking to continue, with constraints
+          messagesPayload.push({ role: 'user', content: `Continúa la historia a partir del contexto anterior. Escribe solo la continuación (sin prefacio), con un máximo de ${contMaxChars} caracteres. Mantén coherencia con personajes, lugares y eventos previos.` });
+
           const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.api_key}` },
-            body: JSON.stringify({ model: config.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: `Historia hasta ahora:\n${context}\n\nContinúa la historia:` }], max_tokens: contMaxTokens, temperature: contTemp })
+            body: JSON.stringify({ model: config.model, messages: messagesPayload, max_tokens: contMaxTokens, temperature: contTemp })
           });
           if (!response.ok) { if (response.status === 429 && attempt < maxRetries) continue; break; }
           const data = await response.json();
@@ -163,13 +181,10 @@ class StoryContributionEvent extends Event {
             aiMessage = aiMessage.replace(/^['"\s]+|['"\s]+$/g, '').trim();
 
             // Enforce max characters requested by config (contMaxChars).
-            // If the model ignores the prompt, truncate safely to avoid very long outputs.
             try {
               const maxChars = Number(contMaxChars) || 0;
               if (maxChars > 0 && aiMessage.length > maxChars) {
                 let truncated = aiMessage.slice(0, maxChars);
-
-                // Prefer cortar en el último signo de puntuación terminal dentro del truncamiento
                 const lastDot = truncated.lastIndexOf('.');
                 const lastEx = truncated.lastIndexOf('!');
                 const lastQ = truncated.lastIndexOf('?');
@@ -177,16 +192,13 @@ class StoryContributionEvent extends Event {
                 if (lastPunc > -1 && lastPunc > Math.floor(maxChars * 0.25)) {
                   truncated = truncated.slice(0, lastPunc + 1).trim();
                 } else {
-                  // Si no hay puntuación adecuada, evitar cortar palabra a la mitad
                   const lastSpace = truncated.lastIndexOf(' ');
                   if (lastSpace > 0) truncated = truncated.slice(0, lastSpace).trim();
-                  // Asegurar que termine en punto si no termina en signo de cierre
                   if (!/[.!?]$/.test(truncated)) truncated = `${truncated}.`;
                 }
 
                 aiMessage = truncated;
               } else {
-                // Si no excede max, asegurar que termine en punto o signo de cierre.
                 if (!/[.!?]$/.test(aiMessage)) {
                   const lastDot = aiMessage.lastIndexOf('.');
                   const lastEx = aiMessage.lastIndexOf('!');
@@ -196,7 +208,7 @@ class StoryContributionEvent extends Event {
                 }
               }
             } catch (e) {
-              // fallback: keep original aiMessage if something falla
+              // fallback
             }
 
             if (aiMessage) break;
@@ -205,11 +217,12 @@ class StoryContributionEvent extends Event {
       }
     } finally { try { await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SEND_MESSAGES: true }); } catch (e) { } }
 
-    if (!aiMessage) { await message.channel.send('La IA no pudo continuar la historia. ¡Alguien más puede contribuir!').catch(() => {}); return; }
+    if (!aiMessage) { await message.channel.send('La IA no pudo continuar la historia. ¡Alguien más puede contribuir!').catch(() => {}); state.waitingIA = false; return; }
 
     await message.channel.send(aiMessage).catch(() => {});
     state.story.push({ author: 'AI', authorName: 'Narrador IA', content: aiMessage, timestamp: Date.now() });
     const aiStats = Number(state.participants.get('AI') || 0); state.participants.set('AI', aiStats + 1);
+    state.waitingIA = false;
     this.saveStoryState(message.channel.id, state);
   }
 }

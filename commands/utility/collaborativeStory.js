@@ -56,7 +56,7 @@ module.exports = class CollaborativeStory extends Command {
   }
 
   async slashRun(interaction, args) {
-    await interaction.deferReply({ flags: this.client.cmdConfig.collaborativestory.ephemeral ? Discord.MessageFlags.Ephemeral : 0 });
+    await interaction.deferReply({ ephemeral: !!this.client.cmdConfig.collaborativestory.ephemeral });
     
     const action = interaction.options.getString("action");
     const messages = this.client.embeds.collaborativestory.messages;
@@ -89,8 +89,8 @@ module.exports = class CollaborativeStory extends Command {
   }
 
   getStoryState(channelId) {
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
-    const filePath = path.join(storiesDir, `story_${channelId}.json`);
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
+    const filePath = path.join(storiesDir, `${channelId}.json`);
     
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -105,12 +105,12 @@ module.exports = class CollaborativeStory extends Command {
   }
 
   saveStoryState(channelId, state) {
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
     if (!fs.existsSync(storiesDir)) {
       fs.mkdirSync(storiesDir, { recursive: true });
     }
 
-    const filePath = path.join(storiesDir, `story_${channelId}.json`);
+    const filePath = path.join(storiesDir, `${channelId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(state, null, 2));
   }
 
@@ -538,8 +538,8 @@ module.exports = class CollaborativeStory extends Command {
     }
 
     // Eliminar archivo de estado
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
-    const filePath = path.join(storiesDir, `story_${message.channel.id}.json`);
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
+    const filePath = path.join(storiesDir, `${message.channel.id}.json`);
     
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -579,8 +579,8 @@ module.exports = class CollaborativeStory extends Command {
     }
 
     // Eliminar archivo de estado
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
-    const filePath = path.join(storiesDir, `story_${interaction.channel.id}.json`);
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
+    const filePath = path.join(storiesDir, `${interaction.channel.id}.json`);
     
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -588,13 +588,13 @@ module.exports = class CollaborativeStory extends Command {
   }
 
   async showActiveChannels(message) {
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
     
     if (!fs.existsSync(storiesDir)) {
       return message.reply("⚠️ No hay historias registradas.");
     }
 
-    const files = fs.readdirSync(storiesDir).filter(f => f.startsWith('story_') && f.endsWith('.json'));
+    const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'));
     
     if (files.length === 0) {
       return message.reply("⚠️ No hay historias registradas.");
@@ -608,7 +608,7 @@ module.exports = class CollaborativeStory extends Command {
       try {
         const filePath = path.join(storiesDir, file);
         const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const channelId = file.replace('story_', '').replace('.json', '');
+        const channelId = file.replace('.json', '');
         
         // Verificar si el canal existe
         const channel = await this.client.channels.fetch(channelId).catch(() => null);
@@ -672,13 +672,13 @@ module.exports = class CollaborativeStory extends Command {
   }
 
   async showActiveChannelsSlash(interaction) {
-    const storiesDir = path.join(__dirname, '../../data/stories_data');
+    const storiesDir = path.join(__dirname, '../../data/collaborativeStory');
     
     if (!fs.existsSync(storiesDir)) {
       return interaction.editReply({ content: "⚠️ No hay historias registradas." });
     }
 
-    const files = fs.readdirSync(storiesDir).filter(f => f.startsWith('story_') && f.endsWith('.json'));
+    const files = fs.readdirSync(storiesDir).filter(f => f.endsWith('.json'));
     
     if (files.length === 0) {
       return interaction.editReply({ content: "⚠️ No hay historias registradas." });
@@ -692,7 +692,7 @@ module.exports = class CollaborativeStory extends Command {
       try {
         const filePath = path.join(storiesDir, file);
         const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const channelId = file.replace('story_', '').replace('.json', '');
+        const channelId = file.replace('.json', '');
         
         // Verificar si el canal existe
         const channel = await this.client.channels.fetch(channelId).catch(() => null);
