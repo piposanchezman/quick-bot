@@ -12,7 +12,21 @@ module.exports = class StaffReply extends Command {
       category: "tickets",
       enabled: client.cmdConfig.staffreply.enabled,
       slash: true,
-      options: []
+      options: (function() {
+        try {
+          const choices = Object.keys(client.embeds?.staff_replies || {}).slice(0, 25).map(k => ({ name: k, value: k }));
+          const opts = [];
+          if (choices.length > 0) {
+            opts.push({ name: 'key', description: 'Plantilla a enviar', type: Discord.ApplicationCommandOptionType.String, required: false, choices });
+          } else {
+            opts.push({ name: 'key', description: 'Clave de plantilla (ver disponible mediante el comando)', type: Discord.ApplicationCommandOptionType.String, required: false });
+          }
+          opts.push({ name: 'channel', description: 'Canal destino (opcional)', type: Discord.ApplicationCommandOptionType.Channel, required: false });
+          return opts;
+        } catch (e) {
+          return [];
+        }
+      })()
     });
   }
 
@@ -82,7 +96,8 @@ module.exports = class StaffReply extends Command {
   }
 
   async slashRun(interaction, args) {
-    const key = args[0]?.toString()?.toLowerCase();
+    const rawKey = interaction.options.getString('key') || args[0];
+    const key = rawKey ? rawKey.toString().toLowerCase() : null;
     if(!key) {
       const keys = Object.keys(this.client.embeds?.staff_replies || {});
       return interaction.reply({ embeds: [this.client.embedBuilder(this.client, interaction.user, this.client.embeds.title, `Claves disponibles: ${keys.join(', ') || 'Ninguna'}`, this.client.embeds.info_color)], flags: 64 });
@@ -92,10 +107,8 @@ module.exports = class StaffReply extends Command {
       return interaction.reply({ embeds: [this.client.embedBuilder(this.client, interaction.user, this.client.embeds.title, this.client.language.ticket.no_permission || "No tienes permiso.", this.client.embeds.error_color)], flags: 64 });
 
     let target = interaction.channel;
-    if(args[1]) {
-      const ch = interaction.options.getChannel('channel') || interaction.guild.channels.cache.get(args[1]);
-      if(ch) target = ch;
-    }
+    const chOption = interaction.options.getChannel('channel');
+    if (chOption) target = chOption;
 
     const template = this.client.embeds?.staff_replies?.[key];
     if(!template) return interaction.reply({ embeds: [this.client.embedBuilder(this.client, interaction.user, this.client.embeds.title, `Plantilla \`${key}\` no encontrada.`, this.client.embeds.error_color)], flags: 64 });
