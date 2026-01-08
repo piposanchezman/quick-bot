@@ -152,4 +152,3 @@ module.exports = class StaffReply extends Command {
     return interaction.reply({ embeds: [this.client.embedBuilder(this.client, interaction.user, this.client.embeds.title, `Plantilla \`${key}\` enviada en ${target.name || target.id}.`, this.client.embeds.success_color)], flags: 64 });
   }
 };
-
