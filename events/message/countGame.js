@@ -232,21 +232,26 @@ module.exports = class extends Event {
 
   loadState() {
     try {
-      const statePath = path.join(__dirname, '../../data/countGameState.json');
-      if (fs.existsSync(statePath)) {
-        const savedStates = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-        
-        // Cargar estados por canal
-        for (const [channelId, channelData] of Object.entries(savedStates)) {
+      const dir = path.join(__dirname, '../../data/countGame');
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        return;
+      }
+
+      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+      for (const file of files) {
+        try {
+          const channelId = file.replace('.json', '');
+          const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
           this.channelStates.set(channelId, {
-            currentCount: channelData.currentCount || 0,
-            lastUserId: channelData.lastUserId || "",
-            lastTimestamp: channelData.lastTimestamp || Date.now(),
-            userStats: new Map(Object.entries(channelData.userStats || {})),
-            userConsecutives: new Map(Object.entries(channelData.userConsecutives || {})),
-            userBlockedTimestamps: new Map(Object.entries(channelData.userBlockedTimestamps || {}))
+            currentCount: data.currentCount || 0,
+            lastUserId: data.lastUserId || "",
+            lastTimestamp: data.lastTimestamp || Date.now(),
+            userStats: new Map(Object.entries(data.userStats || {})),
+            userConsecutives: new Map(Object.entries(data.userConsecutives || {})),
+            userBlockedTimestamps: new Map(Object.entries(data.userBlockedTimestamps || {}))
           });
-        }
+        } catch (e) { }
       }
     } catch (error) {
       // Silenciar errores de carga
@@ -255,16 +260,10 @@ module.exports = class extends Event {
 
   saveState(channelId, state) {
     try {
-      const statePath = path.join(__dirname, '../../data/countGameState.json');
-      
-      // Cargar estados existentes
-      let allStates = {};
-      if (fs.existsSync(statePath)) {
-        allStates = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-      }
-      
-      // Actualizar estado del canal específico
-      allStates[channelId] = {
+      const dir = path.join(__dirname, '../../data/countGame');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const filePath = path.join(dir, `${channelId}.json`);
+      const payload = {
         currentCount: state.currentCount,
         lastUserId: state.lastUserId,
         lastTimestamp: state.lastTimestamp,
@@ -272,9 +271,7 @@ module.exports = class extends Event {
         userConsecutives: Object.fromEntries(state.userConsecutives),
         userBlockedTimestamps: Object.fromEntries(state.userBlockedTimestamps)
       };
-      
-      // Guardar todos los estados
-      fs.writeFileSync(statePath, JSON.stringify(allStates, null, 2));
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
     } catch (error) {
       // Silenciar errores de guardado
     }
