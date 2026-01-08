@@ -1,0 +1,9 @@
+configs
+data
+logs
+node_modules
+transcripts
+.env
+json.sqlite
+package-lock.json
+pnpm-lock.yaml
