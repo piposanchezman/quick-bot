@@ -28,25 +28,13 @@ module.exports = class extends Event {
     let replyData = null;
     let matchedKey = null;
 
-    // Buscar coincidencia exacta o por palabra clave
+    // Buscar coincidencia exacta solamente
     if (config.trigger_words) {
-      // Primero buscar coincidencia exacta
       for (const key in this.getReplies()) {
         if (content === key.toLowerCase()) {
           replyData = this.getReplies()[key];
           matchedKey = key;
           break;
-        }
-      }
-      
-      // Si no hay coincidencia exacta, buscar palabras contenidas
-      if (!replyData) {
-        for (const key in this.getReplies()) {
-          if (content.includes(key.toLowerCase())) {
-            replyData = this.getReplies()[key];
-            matchedKey = key;
-            break;
-          }
         }
       }
     }
