@@ -30,6 +30,7 @@ module.exports = class Claim extends Command {
       if(r.id != ticketData?.owner && r.id != message.member.user.id && r.id != message.guild.id && r.id != this.client.user.id)
         return {
           id: r.id,
+          type: r.type,
           allow: ["ViewChannel"],
           deny: ["SendMessages"]
         };
@@ -37,12 +38,15 @@ module.exports = class Claim extends Command {
 
     let claimPerms = [{
       id: message.guild.id,
+      type: "role",
       deny: ["SendMessages", "ViewChannel"]
     }, {
       id: ticketData?.owner,
+      type: "member",
       allow: ["SendMessages", "ViewChannel"]
     }, {
       id: message.member.id,
+      type: "member",
       allow: ["SendMessages", "ViewChannel"]
     }];
 
@@ -71,6 +75,7 @@ module.exports = class Claim extends Command {
       if(r.id != ticketData?.owner && r.id != interaction.member.user.id && r.id != interaction.guild.id && r.id != this.client.user.id)
         return {
           id: r.id,
+          type: r.type,
           allow: ["ViewChannel"],
           deny: ["SendMessages"]
         };
@@ -78,12 +83,15 @@ module.exports = class Claim extends Command {
 
     let claimPerms = [{
       id: interaction.guild.id,
+      type: "role",
       deny: ["SendMessages", "ViewChannel"]
     }, {
       id: ticketData?.owner,
+      type: "member",
       allow: ["SendMessages", "ViewChannel"]
     }, {
       id: interaction.member.id,
+      type: "member",
       allow: ["SendMessages", "ViewChannel"]
     }];
 
