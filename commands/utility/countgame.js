@@ -62,19 +62,11 @@ module.exports = class CountGame extends Command {
   }
 
   async showStats(message, userMention, messages) {
-    const statePath = path.join(__dirname, '../../data/countGameState.json');
-    const channelId = message.channel.id;
-    
+    const statePath = path.join(__dirname, `../../data/countGame/${message.channel.id}.json`);
     if (!fs.existsSync(statePath)) {
       return message.reply(messages.no_data);
     }
-
-    const allStates = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    const state = allStates[channelId];
-    
-    if (!state) {
-      return message.reply(messages.no_data);
-    }
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     
     if (userMention) {
       const userId = userMention.replace(/[<@!>]/g, '');
@@ -122,16 +114,11 @@ module.exports = class CountGame extends Command {
   }
 
   async showStatsSlash(interaction, user, messages) {
-    const statePath = path.join(__dirname, '../../data/countGameState.json');
-    const channelId = interaction.channel.id;
-    
+    const statePath = path.join(__dirname, `../../data/countGame/${interaction.channel.id}.json`);
     if (!fs.existsSync(statePath)) {
       return interaction.editReply({ content: messages.no_data });
     }
-
-    const allStates = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    const state = allStates[channelId];
-    
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     if (!state) {
       return interaction.editReply({ content: messages.no_data });
     }
